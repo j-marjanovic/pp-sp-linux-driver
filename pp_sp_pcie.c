@@ -17,6 +17,7 @@
  *
  */
 
+
 #include <linux/cdev.h>
 #include <linux/init.h>
 #include <linux/module.h>
@@ -56,19 +57,64 @@ static struct pci_driver pci_drv = {
 };
 
 struct pp_sp_data {
+	struct pci_dev *pdev;
 	unsigned long mmio_base, mmio_length;
 	void *bar0;
 	dev_t char_region;
 	struct cdev cdev;
 };
 
-static long pp_sp_cdev_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {
+static int pp_sp_cdev_open(struct inode *inode, struct file *filp) {
+	struct pp_sp_data *data;
+	pr_debug(MOD_NAME ": open\n");
+
+	data = container_of(inode->i_cdev, struct pp_sp_data, cdev);
+	filp->private_data = data;
+
 	return 0;
 }
 
-static const struct file_operations fops = {
+static long pp_sp_cdev_ioctl(struct file *filp, unsigned int cmd, unsigned long arg) {
+	pr_debug(MOD_NAME ": ioctl\n");
+
+	return 0;
+}
+
+int pp_sp_cdev_mmap(struct file *filp, struct vm_area_struct *vma) {
+	int rc;
+	unsigned long off;
+	unsigned long phys;
+	unsigned long vsize;
+	unsigned long psize;
+	struct pp_sp_data *data = (struct pp_sp_data *)filp->private_data;
+
+	pr_debug(MOD_NAME ": mmap\n");
+
+	off = vma->vm_pgoff << PAGE_SHIFT;
+	phys = pci_resource_start(data->pdev, 0) + off;
+	vsize = vma->vm_end - vma->vm_start;
+	psize = pci_resource_end(data->pdev, 0) -
+		pci_resource_start(data->pdev, 0) + 1 - off;
+
+	if (vsize > psize)
+		return -EINVAL;
+
+	vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
+	vma->vm_flags |= VM_IO | VM_DONTEXPAND | VM_DONTDUMP;
+
+	rc = io_remap_pfn_range(vma, vma->vm_start, phys >> PAGE_SHIFT,
+			vsize, vma->vm_page_prot);
+	if (rc)
+		return -EAGAIN;
+
+	return 0;
+}
+
+static const struct file_operations fops_user = {
 	.owner = THIS_MODULE,
-	.unlocked_ioctl = pp_sp_cdev_ioctl
+	.open = pp_sp_cdev_open,
+	.unlocked_ioctl = pp_sp_cdev_ioctl,
+	.mmap = pp_sp_cdev_mmap,
 };
 
 int pp_sp_probe(struct pci_dev *pdev, const struct pci_device_id *id) {
@@ -84,6 +130,7 @@ int pp_sp_probe(struct pci_dev *pdev, const struct pci_device_id *id) {
 		return -ENOMEM;
 	}
 	dev_set_drvdata(dev, data);
+	data->pdev = pdev;
 
 	// PCIe related things
 	rc = pci_enable_device(pdev);
@@ -112,7 +159,7 @@ int pp_sp_probe(struct pci_dev *pdev, const struct pci_device_id *id) {
 		return rc;
 	}
 
-	cdev_init(&data->cdev, &fops);
+	cdev_init(&data->cdev, &fops_user);
 	rc = cdev_add(&data->cdev, data->char_region, 1);
 	if (rc < 0) {
 		printk(KERN_DEBUG MOD_NAME ": cdev_add failed with %d\n", rc);
@@ -121,7 +168,7 @@ int pp_sp_probe(struct pci_dev *pdev, const struct pci_device_id *id) {
 
 
 	device_create(pp_sp_class, dev, data->char_region, NULL,
-		MOD_NAME "_ctrl_" "%s", pci_name(pdev));
+		MOD_NAME "_user_" "%s", pci_name(pdev));
 
 	return 0;
 
@@ -143,6 +190,7 @@ void pp_sp_remove(struct pci_dev *pdev) {
 
 	data = (struct pp_sp_data*)dev_get_drvdata(&pdev->dev);
 
+	device_destroy(pp_sp_class, data->char_region);
 	cdev_del(&data->cdev);
 
 	iounmap(data->bar0);
