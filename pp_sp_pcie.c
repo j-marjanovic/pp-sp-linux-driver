@@ -17,6 +17,7 @@
  *
  */
 
+#include <linux/cdev.h>
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -24,7 +25,9 @@
 #include <linux/pci.h>
 #include <linux/device.h>
 
+
 #define MOD_NAME "pp_sp_pcie"
+
 
 #define PCI_DEVICE_ID_STRATIXV (0x00a7)
 #define PCI_SUBVENDOR_ID_SP_PP	(PCI_ANY_ID)
@@ -55,17 +58,34 @@ static struct pci_driver pci_drv = {
 struct pp_sp_data {
 	unsigned long mmio_base, mmio_length;
 	void *bar0;
+	dev_t char_region;
+	struct cdev cdev;
 };
 
-struct pp_sp_data pp_sp_data;
+static long pp_sp_cdev_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {
+	return 0;
+}
 
+static const struct file_operations fops = {
+	.owner = THIS_MODULE,
+	.unlocked_ioctl = pp_sp_cdev_ioctl
+};
 
 int pp_sp_probe(struct pci_dev *pdev, const struct pci_device_id *id) {
 	int rc;
+	struct pp_sp_data *data = NULL;
 	struct device *dev = &pdev->dev;
 
 	printk(KERN_DEBUG MOD_NAME ": pp_sp_probe\n");
 
+	data = kzalloc(sizeof(struct pp_sp_data), GFP_KERNEL);
+	if (IS_ERR(data)) {
+		dev_err(dev, "Failed to allocate mem for internal data\n");
+		return -ENOMEM;
+	}
+	dev_set_drvdata(dev, data);
+
+	// PCIe related things
 	rc = pci_enable_device(pdev);
 	if (unlikely(rc < 0)) {
 		dev_err(dev, "Failed to enable the device\n");
@@ -80,12 +100,36 @@ int pp_sp_probe(struct pci_dev *pdev, const struct pci_device_id *id) {
 		goto fail_req_region;
 	}
 
-	pp_sp_data.mmio_base = pci_resource_start(pdev, 0);
-        pp_sp_data.mmio_length = pci_resource_len(pdev, 0);
+	data->mmio_base = pci_resource_start(pdev, 0);
+	data->mmio_length = pci_resource_len(pdev, 0);
 
-	pp_sp_data.bar0 = ioremap(pp_sp_data.mmio_base, pp_sp_data.mmio_length);
+	data->bar0 = ioremap(data->mmio_base, data->mmio_length);
+
+	// char device
+	rc = alloc_chrdev_region(&data->char_region, 0, 1, MOD_NAME);
+	if (rc < 0) {
+		dev_err(dev, "alloc_chrdev_region failed\n");
+		return rc;
+	}
+
+	cdev_init(&data->cdev, &fops);
+	rc = cdev_add(&data->cdev, data->char_region, 1);
+	if (rc < 0) {
+		printk(KERN_DEBUG MOD_NAME ": cdev_add failed with %d\n", rc);
+		goto fail_unreg_ch_reg;
+	}
+
+
+	device_create(pp_sp_class, dev, data->char_region, NULL,
+		MOD_NAME "_ctrl_" "%s", pci_name(pdev));
 
 	return 0;
+
+fail_cdev_del:
+	cdev_del(&data->cdev);
+
+fail_unreg_ch_reg:
+	unregister_chrdev_region(data->char_region, 1);
 
 fail_req_region:
 	pci_clear_master(pdev);
@@ -94,8 +138,14 @@ fail_req_region:
 }
 
 void pp_sp_remove(struct pci_dev *pdev) {
+	struct pp_sp_data *data = NULL;
 	printk(KERN_DEBUG MOD_NAME ": pp_sp_remove\n");
-        iounmap(pp_sp_data.bar0);
+
+	data = (struct pp_sp_data*)dev_get_drvdata(&pdev->dev);
+
+	cdev_del(&data->cdev);
+
+	iounmap(data->bar0);
 	pci_release_regions(pdev);
 	pci_clear_master(pdev);
 	pci_disable_device(pdev);
