@@ -26,17 +26,19 @@
 #include <linux/pci.h>
 #include <linux/device.h>
 
+#include "pp_sp_pcie.h"
+
 
 #define MOD_NAME "pp_sp_pcie"
-
 
 #define PCI_DEVICE_ID_STRATIXV (0x00a7)
 #define PCI_SUBVENDOR_ID_SP_PP	(PCI_ANY_ID)
 #define PCI_SUBDEVICE_ID_SP_PP	(PCI_ANY_ID)
 
+#define PP_SP_STRUCT_MAGIC	(0x77573a9c)
+
 
 static struct class *pp_sp_class = NULL;
-
 
 int pp_sp_probe(struct pci_dev *dev, const struct pci_device_id *id);
 void pp_sp_remove(struct pci_dev *dev);
@@ -57,9 +59,12 @@ static struct pci_driver pci_drv = {
 };
 
 struct pp_sp_data {
+	uint32_t magic;
 	struct pci_dev *pdev;
-	unsigned long mmio_base, mmio_length;
-	void *bar0;
+	unsigned long bar0_base, bar0_length, bar2_base, bar2_length;
+	void *bar0, *bar2;
+	void *dma_buffer_virt;
+	dma_addr_t dma_buffer_phys;
 	dev_t char_region;
 	struct cdev cdev;
 };
@@ -71,11 +76,31 @@ static int pp_sp_cdev_open(struct inode *inode, struct file *filp) {
 	data = container_of(inode->i_cdev, struct pp_sp_data, cdev);
 	filp->private_data = data;
 
+	if (data->magic != PP_SP_STRUCT_MAGIC) {
+		return -EFAULT;
+	}
+
 	return 0;
 }
 
 static long pp_sp_cdev_ioctl(struct file *filp, unsigned int cmd, unsigned long arg) {
+	struct pp_sp_data *data = filp->private_data;
+	if (data->magic != PP_SP_STRUCT_MAGIC) {
+		return -EFAULT;
+	}
+
 	pr_debug(MOD_NAME ": ioctl\n");
+
+	switch (cmd) {
+	case PP_SP_IOCTL_GET_BUFFER:
+		copy_to_user((void*)arg, data->dma_buffer_virt, 4*1024*1024);
+		break;
+	case PP_SP_IOCTL_SET_BUFFER:
+		copy_from_user(data->dma_buffer_virt, (void*)arg, 4*1024*1024);
+		break;
+	default:
+		return -EINVAL;
+	}
 
 	return 0;
 }
@@ -131,6 +156,7 @@ int pp_sp_probe(struct pci_dev *pdev, const struct pci_device_id *id) {
 	}
 	dev_set_drvdata(dev, data);
 	data->pdev = pdev;
+	data->magic = PP_SP_STRUCT_MAGIC;
 
 	// PCIe related things
 	rc = pci_enable_device(pdev);
@@ -147,10 +173,25 @@ int pp_sp_probe(struct pci_dev *pdev, const struct pci_device_id *id) {
 		goto fail_req_region;
 	}
 
-	data->mmio_base = pci_resource_start(pdev, 0);
-	data->mmio_length = pci_resource_len(pdev, 0);
+	rc = pci_request_region(pdev, 2, MOD_NAME);
+	if (unlikely(rc < 0)) {
+		dev_err(dev, "pci_request_region failed for bar 2\n");
+		goto fail_req_region;
+	}
 
-	data->bar0 = ioremap(data->mmio_base, data->mmio_length);
+	data->bar0_base = pci_resource_start(pdev, 0);
+	data->bar0_length = pci_resource_len(pdev, 0);
+	data->bar0 = ioremap(data->bar0_base, data->bar0_length);
+
+	data->bar2_base = pci_resource_start(pdev, 2);
+	data->bar2_length = pci_resource_len(pdev, 2);
+	data->bar2 = ioremap(data->bar2_base, data->bar2_length);
+
+	// DMA buffer
+	data->dma_buffer_virt = dma_alloc_coherent(dev, 4*1024*1024,
+			&data->dma_buffer_phys, GFP_KERNEL);
+	printk(KERN_DEBUG MOD_NAME ": DMA buffer virt = %p\n", data->dma_buffer_virt);
+	printk(KERN_DEBUG MOD_NAME ": DMA buffer phys = %llx\n", data->dma_buffer_phys);
 
 	// char device
 	rc = alloc_chrdev_region(&data->char_region, 0, 1, MOD_NAME);
@@ -193,7 +234,11 @@ void pp_sp_remove(struct pci_dev *pdev) {
 	device_destroy(pp_sp_class, data->char_region);
 	cdev_del(&data->cdev);
 
+	dma_free_coherent(&pdev->dev, 4*1024*1024, data->dma_buffer_virt,
+			data->dma_buffer_phys);
+
 	iounmap(data->bar0);
+	iounmap(data->bar2);
 	pci_release_regions(pdev);
 	pci_clear_master(pdev);
 	pci_disable_device(pdev);
