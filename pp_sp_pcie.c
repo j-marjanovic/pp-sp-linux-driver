@@ -37,6 +37,8 @@
 
 #define PP_SP_STRUCT_MAGIC	(0x77573a9c)
 
+#define PP_SP_BUFFER_SIZE	(128*1024*1024)
+
 
 static struct class *pp_sp_class = NULL;
 
@@ -93,10 +95,13 @@ static long pp_sp_cdev_ioctl(struct file *filp, unsigned int cmd, unsigned long 
 
 	switch (cmd) {
 	case PP_SP_IOCTL_GET_BUFFER:
-		copy_to_user((void*)arg, data->dma_buffer_virt, 4*1024*1024);
+		copy_to_user((void*)arg, data->dma_buffer_virt, PP_SP_BUFFER_SIZE);
 		break;
 	case PP_SP_IOCTL_SET_BUFFER:
-		copy_from_user(data->dma_buffer_virt, (void*)arg, 4*1024*1024);
+		copy_from_user(data->dma_buffer_virt, (void*)arg, PP_SP_BUFFER_SIZE);
+		break;
+	case PP_SP_IOCTL_START_TX:
+		iowrite32(data->dma_buffer_phys, data->bar2 + 0x20);
 		break;
 	default:
 		return -EINVAL;
@@ -188,7 +193,8 @@ int pp_sp_probe(struct pci_dev *pdev, const struct pci_device_id *id) {
 	data->bar2 = ioremap(data->bar2_base, data->bar2_length);
 
 	// DMA buffer
-	data->dma_buffer_virt = dma_alloc_coherent(dev, 4*1024*1024,
+	dma_set_coherent_mask(dev, DMA_BIT_MASK(64));
+	data->dma_buffer_virt = dma_alloc_coherent(dev, PP_SP_BUFFER_SIZE,
 			&data->dma_buffer_phys, GFP_KERNEL);
 	printk(KERN_DEBUG MOD_NAME ": DMA buffer virt = %p\n", data->dma_buffer_virt);
 	printk(KERN_DEBUG MOD_NAME ": DMA buffer phys = %llx\n", data->dma_buffer_phys);
@@ -234,7 +240,7 @@ void pp_sp_remove(struct pci_dev *pdev) {
 	device_destroy(pp_sp_class, data->char_region);
 	cdev_del(&data->cdev);
 
-	dma_free_coherent(&pdev->dev, 4*1024*1024, data->dma_buffer_virt,
+	dma_free_coherent(&pdev->dev, PP_SP_BUFFER_SIZE, data->dma_buffer_virt,
 			data->dma_buffer_phys);
 
 	iounmap(data->bar0);
