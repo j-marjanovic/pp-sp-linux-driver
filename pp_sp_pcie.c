@@ -25,6 +25,8 @@
 #include <linux/mod_devicetable.h>
 #include <linux/pci.h>
 #include <linux/device.h>
+#include <linux/delay.h>
+#include <linux/ktime.h>
 
 #include "pp_sp_pcie.h"
 
@@ -86,6 +88,10 @@ static int pp_sp_cdev_open(struct inode *inode, struct file *filp) {
 }
 
 static long pp_sp_cdev_ioctl(struct file *filp, unsigned int cmd, unsigned long arg) {
+	int i;
+	ktime_t t0, t1, td;
+	s64 td_us;
+	unsigned long tx_size_bytes = 128ULL*1024*1024;
 	struct pp_sp_data *data = filp->private_data;
 	if (data->magic != PP_SP_STRUCT_MAGIC) {
 		return -EFAULT;
@@ -101,7 +107,28 @@ static long pp_sp_cdev_ioctl(struct file *filp, unsigned int cmd, unsigned long 
 		copy_from_user(data->dma_buffer_virt, (void*)arg, PP_SP_BUFFER_SIZE);
 		break;
 	case PP_SP_IOCTL_START_TX:
+		printk(KERN_DEBUG MOD_NAME ": transferring %ld bytes\n", tx_size_bytes);
 		iowrite32(data->dma_buffer_phys, data->bar2 + 0x20);
+		iowrite32(data->dma_buffer_phys >> 32, data->bar2 + 0x24);
+		iowrite32(tx_size_bytes >> 2, data->bar2 + 0x28);
+
+		t0 = ktime_get();
+		iowrite32(0x1, data->bar2 + 0x14);
+
+		for (i = 0; i < 10000; i++) {
+			uint32_t status = ioread32(data->bar2 + 0x10);
+			if (!(status & 1)) {
+				break;
+			}
+			udelay(100);
+		}
+
+		t1 = ktime_get();
+		td = ktime_sub(t1, t0);
+		td_us = ktime_to_us(td);
+		printk(KERN_DEBUG MOD_NAME ": elapsed loops = %d\n", i);
+		printk(KERN_DEBUG MOD_NAME ": elapsed time = %lld us\n", td_us);
+
 		break;
 	default:
 		return -EINVAL;
