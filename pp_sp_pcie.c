@@ -91,6 +91,7 @@ static long pp_sp_cdev_ioctl(struct file *filp, unsigned int cmd, unsigned long 
 	int i;
 	ktime_t t0, t1, td;
 	s64 td_us;
+	u64 throughput_mbps;
 	unsigned long tx_size_bytes = 128ULL*1024*1024;
 	struct pp_sp_data *data = filp->private_data;
 	if (data->magic != PP_SP_STRUCT_MAGIC) {
@@ -110,7 +111,7 @@ static long pp_sp_cdev_ioctl(struct file *filp, unsigned int cmd, unsigned long 
 		printk(KERN_DEBUG MOD_NAME ": transferring %ld bytes\n", tx_size_bytes);
 		iowrite32(data->dma_buffer_phys, data->bar2 + 0x20);
 		iowrite32(data->dma_buffer_phys >> 32, data->bar2 + 0x24);
-		iowrite32(tx_size_bytes >> 2, data->bar2 + 0x28);
+		iowrite32(tx_size_bytes, data->bar2 + 0x28);
 
 		t0 = ktime_get();
 		iowrite32(0x1, data->bar2 + 0x14);
@@ -126,8 +127,10 @@ static long pp_sp_cdev_ioctl(struct file *filp, unsigned int cmd, unsigned long 
 		t1 = ktime_get();
 		td = ktime_sub(t1, t0);
 		td_us = ktime_to_us(td);
+		throughput_mbps = (tx_size_bytes * 1000000) / (td_us * 1024*1024);
 		printk(KERN_DEBUG MOD_NAME ": elapsed loops = %d\n", i);
 		printk(KERN_DEBUG MOD_NAME ": elapsed time = %lld us\n", td_us);
+		printk(KERN_DEBUG MOD_NAME ": throughput = %lld MBps\n", throughput_mbps);
 
 		break;
 	default:
