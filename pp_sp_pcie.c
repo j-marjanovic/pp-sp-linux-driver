@@ -127,7 +127,7 @@ static long pp_sp_cdev_ioctl(struct file *filp, unsigned int cmd, unsigned long 
 		t1 = ktime_get();
 		td = ktime_sub(t1, t0);
 		td_us = ktime_to_us(td);
-		throughput_mbps = (tx_size_bytes * 1000000) / (td_us * 1024*1024);
+		throughput_mbps = (tx_size_bytes * 1000000) / (td_us * 1000*1000);
 		printk(KERN_DEBUG MOD_NAME ": elapsed loops = %d\n", i);
 		printk(KERN_DEBUG MOD_NAME ": elapsed time = %lld us\n", td_us);
 		printk(KERN_DEBUG MOD_NAME ": throughput = %lld MBps\n", throughput_mbps);
