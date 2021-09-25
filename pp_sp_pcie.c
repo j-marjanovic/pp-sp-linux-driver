@@ -18,6 +18,7 @@
  */
 
 
+#include <asm/atomic.h>
 #include <linux/cdev.h>
 #include <linux/init.h>
 #include <linux/module.h>
@@ -71,6 +72,7 @@ struct pp_sp_data {
 	dma_addr_t dma_buffer_phys;
 	dev_t char_region;
 	struct cdev cdev;
+	atomic_t irq_count;
 };
 
 static int pp_sp_cdev_open(struct inode *inode, struct file *filp) {
@@ -177,6 +179,19 @@ static const struct file_operations fops_user = {
 	.mmap = pp_sp_cdev_mmap,
 };
 
+static irqreturn_t pp_sp_isr(int irq, void *payload) {
+	struct pp_sp_data *data = (struct pp_sp_data*)payload;
+
+	if (data->magic != PP_SP_STRUCT_MAGIC) {
+		return IRQ_NONE;
+	}
+
+	iowrite32(1, data->bar2 + 0x64);
+	atomic_inc(&data->irq_count);
+
+	return IRQ_HANDLED;
+}
+
 int pp_sp_probe(struct pci_dev *pdev, const struct pci_device_id *id) {
 	int rc;
 	struct pp_sp_data *data = NULL;
@@ -192,6 +207,7 @@ int pp_sp_probe(struct pci_dev *pdev, const struct pci_device_id *id) {
 	dev_set_drvdata(dev, data);
 	data->pdev = pdev;
 	data->magic = PP_SP_STRUCT_MAGIC;
+	atomic_set(&data->irq_count, 0);
 
 	// PCIe related things
 	rc = pci_enable_device(pdev);
@@ -201,6 +217,18 @@ int pp_sp_probe(struct pci_dev *pdev, const struct pci_device_id *id) {
 	}
 
 	pci_set_master(pdev);
+
+	rc = pci_enable_msi(pdev);
+	if (unlikely(rc < 0)) {
+		dev_err(dev, "pci_enable_msi failed\n");
+		goto fail_req_region;
+	}
+
+	rc = request_irq(pdev->irq, &pp_sp_isr, 0, MOD_NAME, data);
+	if (unlikely(rc < 0)) {
+		dev_err(dev, "request_irq failed\n");
+		goto fail_req_region;
+	}
 
 	rc = pci_request_region(pdev, 0, MOD_NAME);
 	if (unlikely(rc < 0)) {
@@ -266,6 +294,10 @@ void pp_sp_remove(struct pci_dev *pdev) {
 	printk(KERN_DEBUG MOD_NAME ": pp_sp_remove\n");
 
 	data = (struct pp_sp_data*)dev_get_drvdata(&pdev->dev);
+
+	free_irq(pdev->irq, data);
+	printk(KERN_DEBUG MOD_NAME ": interrupt count = %u\n",
+			atomic_read(&data->irq_count));
 
 	device_destroy(pp_sp_class, data->char_region);
 	cdev_del(&data->cdev);
