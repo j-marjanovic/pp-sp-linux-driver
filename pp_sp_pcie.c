@@ -299,6 +299,8 @@ void pp_sp_remove(struct pci_dev *pdev) {
 	printk(KERN_DEBUG MOD_NAME ": interrupt count = %u\n",
 			atomic_read(&data->irq_count));
 
+	pci_disable_msi(pdev);
+
 	device_destroy(pp_sp_class, data->char_region);
 	cdev_del(&data->cdev);
 
