@@ -53,11 +53,11 @@ class Gui:
         self.bar_left_write = Bar(3, w // 2 - 4, 12, 2, max_val=8000)
 
         self.stdscr.addstr(16, 3, "Mode:")
-        radio = RadioList(5, 14, 17, 2)
+        self.radio = RadioList(5, 14, 17, 2)
         self.stdscr.addstr(16, 21, "Tr. size:")
-        ts = TransferSizeSel(3, 12, 17, 20)
+        self.ts = TransferSizeSel(3, 12, 17, 20)
 
-        self.controls = [radio, ts]
+        self.controls = [self.radio, self.ts]
         self.controls_sel = 0
         self.controls[self.controls_sel].set_highlight(True)
         self.controls[self.controls_sel].refresh()
@@ -115,6 +115,7 @@ class Gui:
                 elif char in (curses.KEY_UP, curses.KEY_DOWN, curses.KEY_ENTER, "\n"):
                     self.controls[self.controls_sel].cmd(char)
                     self.controls[self.controls_sel].refresh()
+                    self.cmd_queue.put(MsgCmd(False, self.ts.size))
             except KeyboardInterrupt:
-                self.cmd_queue.put(MsgCmd(True))
+                self.cmd_queue.put(MsgCmd(True, self.ts.size))
                 break

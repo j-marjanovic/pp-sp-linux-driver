@@ -4,6 +4,7 @@ import dataclasses
 @dataclasses.dataclass
 class MsgCmd:
     stop: bool
+    size_bytes: int
 
 
 @dataclasses.dataclass
