@@ -4,7 +4,7 @@ import queue
 import time
 
 from GuiElements import Bar, MessagePane, RadioList, TransferSizeSel
-from QueueMsg import MsgCmd, MsgResp
+from QueueMsg import Mode, MsgCmd, MsgResp
 
 
 class Gui:
@@ -46,11 +46,11 @@ class Gui:
 
         self.stdscr.addstr(6, 3, "Read speed:")
         self.stdscr.refresh()
-        self.bar_left_read = Bar(3, w // 2 - 4, 7, 2, max_val=8000)
+        self.bar_left_read = Bar(4, w // 2 - 4, 7, 2, max_val=8000)
 
         self.stdscr.refresh()
         self.stdscr.addstr(11, 3, "Write speed:")
-        self.bar_left_write = Bar(3, w // 2 - 4, 12, 2, max_val=8000)
+        self.bar_left_write = Bar(4, w // 2 - 4, 12, 2, max_val=8000)
 
         self.stdscr.addstr(16, 3, "Mode:")
         self.radio = RadioList(5, 14, 17, 2)
@@ -97,7 +97,7 @@ class Gui:
                     except queue.Empty:
                         pass
                     time.sleep(0.01)
-                if (
+                elif (
                     char == curses.KEY_RIGHT
                     and self.controls_sel < len(self.controls) - 1
                 ):
@@ -112,10 +112,16 @@ class Gui:
                     self.controls_sel -= 1
                     self.controls[self.controls_sel].set_highlight(True)
                     self.controls[self.controls_sel].refresh()
-                elif char in (curses.KEY_UP, curses.KEY_DOWN, curses.KEY_ENTER, "\n"):
+                elif char in (
+                    curses.KEY_UP,
+                    curses.KEY_DOWN,
+                    curses.KEY_ENTER,
+                    ord("\n"),
+                ):
                     self.controls[self.controls_sel].cmd(char)
                     self.controls[self.controls_sel].refresh()
-                    self.cmd_queue.put(MsgCmd(False, self.ts.size))
+                    mode = Mode(self.radio.sel)
+                    self.cmd_queue.put(MsgCmd(False, self.ts.size, mode))
             except KeyboardInterrupt:
-                self.cmd_queue.put(MsgCmd(True, self.ts.size))
+                self.cmd_queue.put(MsgCmd(True, None, None))
                 break

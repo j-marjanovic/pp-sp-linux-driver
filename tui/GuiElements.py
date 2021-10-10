@@ -1,10 +1,13 @@
 import curses
 from abc import ABC, abstractmethod
 
+import numpy as np
+
 
 class MessagePane:
     def __init__(self, nlines: int, ncols: int, begin_y: int, begin_x: int):
-        self.lines = [str(idx) * 10 for idx in range(nlines - 2)]
+        self.lines = []  # str(idx) * 10 for idx in range(nlines - 2)]
+        self.nlines = nlines
 
         self.win = curses.newwin(nlines, ncols, begin_y, begin_x)
         self.win.border()
@@ -26,8 +29,9 @@ class MessagePane:
         self.win.refresh()
 
     def append_msg(self, msg):
-        del self.lines[0]
         self.lines.append(msg)
+        if len(self.lines) > self.nlines - 2:
+            del self.lines[0]
         self.refresh()
 
 
@@ -38,6 +42,8 @@ class Bar:
         self.txt = ""
         self.fill_perc = 0
         self.max_val = max_val
+        self.prev_vals = []
+        self.stats_txt = ""
 
         self.win = curses.newwin(nlines, ncols, begin_y, begin_x)
         self.win.border()
@@ -46,8 +52,21 @@ class Bar:
         self.refresh()
 
     def set_value(self, val: float):
-        self.txt = f" {val} MB/s"
+        self.txt = f" {val:7.2f} MB/s"
         self.fill_perc = val * 100 / self.max_val
+        self.prev_vals.append(val)
+        if len(self.prev_vals) > 100:
+            del self.prev_vals[0]
+
+        prev_vals_np = np.array(self.prev_vals)
+        stats_min = np.min(prev_vals_np)
+        stats_max = np.max(prev_vals_np)
+        stats_mean = np.mean(prev_vals_np)
+
+        self.stats_txt = (
+            f"{stats_min:7.2f} MB/s | {stats_mean:7.2f} MB/s | {stats_max:7.2f} MB/s"
+        )
+        val_min = np.min(self.prev_vals)
         self.refresh()
 
     def refresh(self):
@@ -63,6 +82,7 @@ class Bar:
             color = curses.color_pair(6) if i <= w_fill else curses.color_pair(2)
             self.win.addch(1, i, ch, color)
 
+        self.win.addstr(2, 1, self.stats_txt)
         self.win.refresh()
 
 
@@ -82,7 +102,8 @@ class ControlElement(ABC):
 
 class RadioList(ControlElement):
     def __init__(self, nlines: int, ncols: int, begin_y: int, begin_x: int):
-        self.els = ["Idle", "Read", "Write"]
+        self.els = ["Idle", "Write", "Read"]
+        # TODO: change this to use Mode
         self.sel = 0
         self.highlight = False
         self.sel_highlight = 0
@@ -112,8 +133,9 @@ class RadioList(ControlElement):
             self.sel_highlight += 1
         elif char == curses.KEY_UP and self.sel_highlight > 0:
             self.sel_highlight -= 1
-        elif char in (curses.KEY_ENTER, "\n"):
+        elif char in (curses.KEY_ENTER, ord("\n")):
             self.sel = self.sel_highlight
+        self.refresh()
 
     def set_highlight(self, highlighted):
         self.highlight = highlighted
