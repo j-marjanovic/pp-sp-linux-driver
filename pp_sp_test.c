@@ -35,15 +35,13 @@ typedef uint64_t u64;
 
 #include "pp_sp_pcie.h"
 
-void ast_gen_init(void* mem_gen)
+void ast_gen_init(void* mem_gen, uint32_t nr_samp)
 {
     uint32_t id_reg = *(uint32_t*)mem_gen;
     printf("[gen] id reg = %x\n", id_reg);
 
-    uint32_t gen_en_before = *(uint32_t*)(mem_gen + 0x14);
+    *(uint32_t*)(mem_gen + 0x20) = nr_samp;
     *(uint32_t*)(mem_gen + 0x14) = 1;
-    uint32_t gen_en_after = *(uint32_t*)(mem_gen + 0x14);
-    printf("[gen] mem gen before = %x, after = %x\n", gen_en_before, gen_en_after);
 }
 
 void ast_check_clear(void* mem_check)
@@ -56,6 +54,8 @@ void ast_check_clear(void* mem_check)
 
 int main(int argc, char* argv[])
 {
+
+    uint32_t nr_samp = 1024 * 1024;
 
     // init
     if (argc != 2) {
@@ -80,14 +80,14 @@ int main(int argc, char* argv[])
     void* mem_gen = mem + 0x11000;
     void* mem_check = mem + 0x10000;
 
-    ast_gen_init(mem_gen);
+    ast_gen_init(mem_gen, nr_samp);
     ast_check_clear(mem_check);
 
     // card to host DMA
     int rc;
     struct pp_sp_tx_cmd_resp tx_cmd;
     tx_cmd.dir_wr_rd_n = 1;
-    tx_cmd.size_bytes = 0x1000000;
+    tx_cmd.size_bytes = nr_samp * 32;
     clock_t t0, t1;
     t0 = clock();
     rc = ioctl(fd, PP_SP_IOCTL_START_TX, &tx_cmd);
@@ -101,17 +101,16 @@ int main(int argc, char* argv[])
     rc = ioctl(fd, PP_SP_IOCTL_GET_BUFFER, data);
     assert(rc == 0);
 
-    // TODO: clear skid buffer when DMA in idle
-    for (unsigned int i = 32; i < 0x1000000 / 2; i++) {
-        if (data[i] != ((i - 32) & 0xFFFF)) {
-            printf("at %d, expected = %x, got = %x\n", i, i - 32, data[i]);
+    for (unsigned int i = 32; i < tx_cmd.size_bytes / 2; i++) {
+        uint16_t exp = i & 0xFFFF;
+        if (data[i] != exp) {
+            printf("at %d, expected = %x, got = %x\n", i, exp, data[i]);
             return EXIT_FAILURE;
         }
     }
 
     // host to card DMA
     tx_cmd.dir_wr_rd_n = 0;
-    tx_cmd.size_bytes = 0x1000000;
     t0 = clock();
     rc = ioctl(fd, PP_SP_IOCTL_START_TX, &tx_cmd);
     t1 = clock();
