@@ -72,6 +72,8 @@ struct pp_sp_data {
 	dma_addr_t dma_buffer_phys;
 	dev_t char_region;
 	struct cdev cdev;
+	wait_queue_head_t irq_wq;
+	int irq_flag;
 	atomic_t irq_count;
 };
 
@@ -90,11 +92,10 @@ static int pp_sp_cdev_open(struct inode *inode, struct file *filp) {
 }
 
 static long pp_sp_cdev_ioctl(struct file *filp, unsigned int cmd, unsigned long arg) {
-	int i;
-	ktime_t t0, t1, td;
-	s64 td_us;
+	u64 t0, t1, td;
 	u64 throughput_mbps;
-	unsigned long tx_size_bytes = 128ULL*1024*1024;
+	struct pp_sp_tx_cmd_resp* cmd_resp;
+
 	struct pp_sp_data *data = filp->private_data;
 	if (data->magic != PP_SP_STRUCT_MAGIC) {
 		return -EFAULT;
@@ -110,28 +111,33 @@ static long pp_sp_cdev_ioctl(struct file *filp, unsigned int cmd, unsigned long 
 		copy_from_user(data->dma_buffer_virt, (void*)arg, PP_SP_BUFFER_SIZE);
 		break;
 	case PP_SP_IOCTL_START_TX:
-		printk(KERN_DEBUG MOD_NAME ": transferring %ld bytes\n", tx_size_bytes);
-		iowrite32(data->dma_buffer_phys, data->bar2 + 0x20);
-		iowrite32(data->dma_buffer_phys >> 32, data->bar2 + 0x24);
-		iowrite32(tx_size_bytes, data->bar2 + 0x28);
+		cmd_resp = (struct pp_sp_tx_cmd_resp*)arg;
 
-		t0 = ktime_get();
-		iowrite32(0x1, data->bar2 + 0x14);
-
-		for (i = 0; i < 10000; i++) {
-			uint32_t status = ioread32(data->bar2 + 0x10);
-			if (!(status & 1)) {
-				break;
-			}
-			udelay(100);
+		if ((cmd_resp->size_bytes & 3) || (cmd_resp->size_bytes == 0)) {
+			return -EINVAL;
 		}
 
-		t1 = ktime_get();
-		td = ktime_sub(t1, t0);
-		td_us = ktime_to_us(td);
-		throughput_mbps = (tx_size_bytes * 1000000) / (td_us * 1000*1000);
-		printk(KERN_DEBUG MOD_NAME ": elapsed loops = %d\n", i);
-		printk(KERN_DEBUG MOD_NAME ": elapsed time = %lld us\n", td_us);
+		printk(KERN_DEBUG MOD_NAME ": transferring %d bytes\n", cmd_resp->size_bytes);
+		iowrite32(data->dma_buffer_phys, data->bar2 + 0x20);
+		iowrite32(data->dma_buffer_phys >> 32, data->bar2 + 0x24);
+		iowrite32(cmd_resp->size_bytes, data->bar2 + 0x28);
+		iowrite32(cmd_resp->dir_wr_rd_n << 31, data->bar2 + 0x2c);
+
+		t0 = ktime_get_ns();
+		iowrite32(0x1, data->bar2 + 0x14);
+		data->irq_flag = 0;
+
+		wait_event_interruptible_timeout(data->irq_wq, data->irq_flag != 0,
+				msecs_to_jiffies(10000));
+		// TODO: check return value from wait_...
+
+		data->irq_flag = 0;
+
+		t1 = ktime_get_ns();
+		td = t1 - t0;
+		copy_to_user(&cmd_resp->duration_ns, &td, sizeof(cmd_resp->duration_ns));
+		throughput_mbps = cmd_resp->size_bytes * 1000ULL / td;
+		printk(KERN_DEBUG MOD_NAME ": elapsed time = %lld us\n", td / 1000);
 		printk(KERN_DEBUG MOD_NAME ": throughput = %lld MBps\n", throughput_mbps);
 
 		break;
@@ -189,6 +195,9 @@ static irqreturn_t pp_sp_isr(int irq, void *payload) {
 	iowrite32(1, data->bar2 + 0x64);
 	atomic_inc(&data->irq_count);
 
+	data->irq_flag = 1;
+	wake_up(&data->irq_wq);
+
 	return IRQ_HANDLED;
 }
 
@@ -208,6 +217,8 @@ int pp_sp_probe(struct pci_dev *pdev, const struct pci_device_id *id) {
 	data->pdev = pdev;
 	data->magic = PP_SP_STRUCT_MAGIC;
 	atomic_set(&data->irq_count, 0);
+	init_waitqueue_head(&data->irq_wq);
+	data->irq_flag = 0;
 
 	// PCIe related things
 	rc = pci_enable_device(pdev);

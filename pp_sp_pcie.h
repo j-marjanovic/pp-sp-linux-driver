@@ -21,7 +21,16 @@
 
 #define PP_SP_IOCTL_MAGIC	(0x25)
 
+struct pp_sp_tx_cmd_resp {
+	// command
+	unsigned char dir_wr_rd_n; // 1 for write, 0 for read
+	uint32_t size_bytes;
+
+	// response
+	u64 duration_ns;
+};
+
 #define PP_SP_IOCTL_SET_BUFFER	_IOW(PP_SP_IOCTL_MAGIC, 1, void*)
 #define PP_SP_IOCTL_GET_BUFFER	_IOR(PP_SP_IOCTL_MAGIC, 1, void*)
-#define PP_SP_IOCTL_START_TX	_IO(PP_SP_IOCTL_MAGIC, 2)
+#define PP_SP_IOCTL_START_TX	_IOWR(PP_SP_IOCTL_MAGIC, 2, struct pp_sp_tx_cmd_resp*)
 

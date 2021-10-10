@@ -27,6 +27,10 @@
 #include <sys/ioctl.h>
 #include <assert.h>
 #include <unistd.h>
+#include <string.h>
+#include <time.h>
+
+typedef uint64_t u64;
 
 #include "pp_sp_pcie.h"
 
