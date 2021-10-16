@@ -117,7 +117,7 @@ static long pp_sp_cdev_ioctl(struct file *filp, unsigned int cmd, unsigned long 
 			return -EINVAL;
 		}
 
-		printk(KERN_DEBUG MOD_NAME ": transferring %d bytes\n", cmd_resp->size_bytes);
+		// printk(KERN_DEBUG MOD_NAME ": transferring %d bytes\n", cmd_resp->size_bytes);
 		iowrite32(data->dma_buffer_phys, data->bar2 + 0x20);
 		iowrite32(data->dma_buffer_phys >> 32, data->bar2 + 0x24);
 		iowrite32(cmd_resp->size_bytes, data->bar2 + 0x28);
@@ -137,8 +137,8 @@ static long pp_sp_cdev_ioctl(struct file *filp, unsigned int cmd, unsigned long 
 		td = t1 - t0;
 		copy_to_user(&cmd_resp->duration_ns, &td, sizeof(cmd_resp->duration_ns));
 		throughput_mbps = cmd_resp->size_bytes * 1000ULL / td;
-		printk(KERN_DEBUG MOD_NAME ": elapsed time = %lld us\n", td / 1000);
-		printk(KERN_DEBUG MOD_NAME ": throughput = %lld MBps\n", throughput_mbps);
+		// printk(KERN_DEBUG MOD_NAME ": elapsed time = %lld us\n", td / 1000);
+		// printk(KERN_DEBUG MOD_NAME ": throughput = %lld MBps\n", throughput_mbps);
 
 		break;
 	default:
