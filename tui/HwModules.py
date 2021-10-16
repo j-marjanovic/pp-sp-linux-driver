@@ -27,19 +27,44 @@ class _Module:
 class AvalonStGen(_Module):
     ADDR_ID_REG = 0
     ADDR_VERSION = 4
+    ADDR_STATUS = 0x10
     ADDR_CTRL = 0x14
     ADDR_SAMPLES = 0x20
+    ADDR_SAMPLES_TX = 0x24
 
     def __init__(self, mem, offs):
         super().__init__(mem, offs)
         id_reg = self._rd32(self.ADDR_ID_REG)
         version = self._rd32(self.ADDR_VERSION)
-        print(f"[AvalonStGen] id reg  = {id_reg:08x}")
-        print(f"[AvalonStGen] version = {version:08x}")
 
     def start(self, nr_samp):
         self._wr32(self.ADDR_SAMPLES, nr_samp)
         self._wr32(self.ADDR_CTRL, 1)
+
+    def get_state(self):
+        state = self._rd32(self.ADDR_STATUS) & 1
+        samp_tx = self._rd32(self.ADDR_SAMPLES_TX)
+        return (state, samp_tx)
+
+
+class AvalonStCheck(_Module):
+    ADDR_ID_REG = 0
+    ADDR_VERSION = 4
+    ADDR_SAMP_TOT = 0x10
+    ADDR_SAMP_OK = 0x14
+
+    def __init__(self, mem, offs):
+        super().__init__(mem, offs)
+        id_reg = self._rd32(self.ADDR_ID_REG)
+        version = self._rd32(self.ADDR_VERSION)
+
+    def get_stats(self):
+        tot = self._rd32(self.ADDR_SAMP_TOT)
+        ok = self._rd32(self.ADDR_SAMP_OK)
+        return (tot, ok)
+
+    def clear(self):
+        self._wr32(self.ADDR_SAMP_TOT, 1)
 
 
 class pp_sp_tx_cmd_resp(ctypes.Structure):
