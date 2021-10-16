@@ -85,8 +85,9 @@ void print_usage(const char* prog_name)
     printf("  --dev       char device (e.g. /dev/pp_sp_pcie...)\n");
     printf("  --write     card to host (DMA write) transfer\n");
     printf("  --read      host to card (DMA read) transfer\n");
-    printf("  --nr_samp   number of samples (32-byte words to transfer\n");
-    printf("  --count     count of loops to perform the reads and/or writes\n");
+    printf("  --nr_samp   number of samples (32-byte words to transfer (default 64)\n");
+    printf("  --count     count of loops to perform the reads and/or writes (default 1)\n");
+    printf("  --msleep    sleep (in milliseconds) during each loop (default 0)\n");
 }
 
 int main(int argc, char* argv[])
@@ -94,6 +95,7 @@ int main(int argc, char* argv[])
 
     int nr_samp = 64;
     int count = 1;
+    int loop_msleep = 0;
     char* dev = NULL;
 
     int c2h, h2c;
@@ -106,6 +108,7 @@ int main(int argc, char* argv[])
         { "read",    no_argument,       &h2c, 1   },
         { "nr_samp", required_argument, 0,    'n' },
         { "count",   required_argument, 0,    'c' },
+        { "msleep",  required_argument, 0,    'm' },
         { 0, 0, 0, 0 },
     };
     // clang-format on
@@ -125,6 +128,9 @@ int main(int argc, char* argv[])
             break;
         case 'c':
             count = atoi(optarg);
+            break;
+        case 'm':
+            loop_msleep = atoi(optarg);
             break;
         case 'h':
             print_usage(argv[0]);
@@ -213,6 +219,13 @@ int main(int argc, char* argv[])
             rc = ast_check(mem_check);
             assert(rc == 1);
         }
+
+        struct timespec t_req = {
+            .tv_sec = 0,
+            .tv_nsec = loop_msleep * 1000 * 1000,
+        };
+
+        nanosleep(&t_req, NULL);
     }
 
     // clean-up
