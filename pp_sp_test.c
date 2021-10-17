@@ -173,6 +173,7 @@ int main(int argc, char* argv[])
     for (int i = 0; i < count; i++) {
         printf("===================================\n");
         printf("[loop] i = %d\n", i);
+        fflush(stdout);
 
         if (c2h) {
             ast_gen_init(mem_gen, nr_samp);
@@ -220,9 +221,13 @@ int main(int argc, char* argv[])
             assert(rc == 1);
         }
 
+        fflush(stdout);
+
+        long sec = loop_msleep / 1000;
+        long nsec = (loop_msleep - sec * 1000) * 1000 * 1000;
         struct timespec t_req = {
-            .tv_sec = 0,
-            .tv_nsec = loop_msleep * 1000 * 1000,
+            .tv_sec = sec,
+            .tv_nsec = nsec
         };
 
         nanosleep(&t_req, NULL);
