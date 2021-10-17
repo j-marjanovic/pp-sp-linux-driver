@@ -40,7 +40,7 @@
 
 #define PP_SP_STRUCT_MAGIC	(0x77573a9c)
 
-#define PP_SP_BUFFER_SIZE	(128*1024*1024)
+#define PP_SP_BUFFER_SIZE	(4*1024*1024)
 
 
 static struct class *pp_sp_class = NULL;
@@ -94,7 +94,7 @@ static int pp_sp_cdev_open(struct inode *inode, struct file *filp) {
 static long pp_sp_cdev_ioctl(struct file *filp, unsigned int cmd, unsigned long arg) {
 	u64 t0, t1, td;
 	u64 throughput_mbps;
-	struct pp_sp_tx_cmd_resp* cmd_resp;
+	struct pp_sp_tx_cmd_resp cmd_resp;
 
 	struct pp_sp_data *data = filp->private_data;
 	if (data->magic != PP_SP_STRUCT_MAGIC) {
@@ -111,17 +111,17 @@ static long pp_sp_cdev_ioctl(struct file *filp, unsigned int cmd, unsigned long 
 		copy_from_user(data->dma_buffer_virt, (void*)arg, PP_SP_BUFFER_SIZE);
 		break;
 	case PP_SP_IOCTL_START_TX:
-		cmd_resp = (struct pp_sp_tx_cmd_resp*)arg;
+		copy_from_user(&cmd_resp, (void*)arg, sizeof(struct pp_sp_tx_cmd_resp));
 
-		if ((cmd_resp->size_bytes & 3) || (cmd_resp->size_bytes == 0)) {
+		if ((cmd_resp.size_bytes & 3) || (cmd_resp.size_bytes == 0)) {
 			return -EINVAL;
 		}
 
 		// printk(KERN_DEBUG MOD_NAME ": transferring %d bytes\n", cmd_resp->size_bytes);
 		iowrite32(data->dma_buffer_phys, data->bar2 + 0x20);
 		iowrite32(data->dma_buffer_phys >> 32, data->bar2 + 0x24);
-		iowrite32(cmd_resp->size_bytes, data->bar2 + 0x28);
-		iowrite32(cmd_resp->dir_wr_rd_n << 31, data->bar2 + 0x2c);
+		iowrite32(cmd_resp.size_bytes, data->bar2 + 0x28);
+		iowrite32(cmd_resp.dir_wr_rd_n << 31, data->bar2 + 0x2c);
 
 		t0 = ktime_get_ns();
 		iowrite32(0x1, data->bar2 + 0x14);
@@ -135,8 +135,9 @@ static long pp_sp_cdev_ioctl(struct file *filp, unsigned int cmd, unsigned long 
 
 		t1 = ktime_get_ns();
 		td = t1 - t0;
-		copy_to_user(&cmd_resp->duration_ns, &td, sizeof(cmd_resp->duration_ns));
-		throughput_mbps = cmd_resp->size_bytes * 1000ULL / td;
+		cmd_resp.duration_ns = td;
+		copy_to_user((void*)arg, &cmd_resp, sizeof(struct pp_sp_tx_cmd_resp));
+		throughput_mbps = cmd_resp.size_bytes * 1000ULL / td;
 		// printk(KERN_DEBUG MOD_NAME ": elapsed time = %lld us\n", td / 1000);
 		// printk(KERN_DEBUG MOD_NAME ": throughput = %lld MBps\n", throughput_mbps);
 
