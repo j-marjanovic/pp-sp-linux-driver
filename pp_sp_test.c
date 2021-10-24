@@ -176,7 +176,7 @@ int main(int argc, char* argv[])
         fflush(stdout);
 
         if (c2h) {
-            ast_gen_init(mem_gen, nr_samp);
+            ast_gen_init(mem_gen, nr_samp * 32);
             ast_gen_state(mem_gen, NULL);
 
             // card to host DMA
@@ -201,7 +201,7 @@ int main(int argc, char* argv[])
                 }
             }
             ast_gen_state(mem_gen, &nr_samp_gen);
-            assert((int)nr_samp_gen == nr_samp);
+            assert((int)nr_samp_gen == nr_samp * 32);
         }
 
         if (h2c) {

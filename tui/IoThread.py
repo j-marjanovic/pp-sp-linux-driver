@@ -19,7 +19,7 @@ class IoThread(threading.Thread):
         self.cmd_queue = cmd_queue
         self.resp_queue = resp_queue
 
-        self.filename = "/dev/pp_sp_pcie_user_0000:04:00.0"
+        self.filename = "/dev/pp_sp_pcie_user_0000:05:00.0"
         self.fd = os.open(self.filename, os.O_RDWR)
         self.mem = mmap.mmap(self.fd, 4 * 1024 * 1024)
         self.st_gen = AvalonStGen(self.mem, 0x11000)
@@ -46,7 +46,7 @@ class IoThread(threading.Thread):
                 if self.mode == Mode.READ:
                     self.st_check.clear()
                 elif self.mode == Mode.WRITE:
-                    self.st_gen.start(self.size_bytes // 32)
+                    self.st_gen.start(self.size_bytes)
                     state, samp_tx = self.st_gen.get_state()
                     assert state == 1
 
@@ -57,7 +57,7 @@ class IoThread(threading.Thread):
                 )
                 ret_cmd_resp = pp_sp_tx_cmd_resp.from_buffer_copy(ret)
 
-                throughput_mbps = (self.size_bytes / 1024 / 1024) / (
+                throughput_mbps = (self.size_bytes / 1000 / 1000) / (
                     ret_cmd_resp.duration_ns * 1e-9
                 )
 
@@ -69,7 +69,7 @@ class IoThread(threading.Thread):
                 elif self.mode == Mode.WRITE:
                     state, samp_tx = self.st_gen.get_state()
                     assert state == 0
-                    assert samp_tx == self.size_bytes // 32
+                    assert samp_tx == self.size_bytes
                     throughput_read_mbps = 0
                     throughput_write_mbps = throughput_mbps
                     msg_check = ""
