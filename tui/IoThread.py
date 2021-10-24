@@ -13,13 +13,15 @@ from QueueMsg import Mode, MsgCmd, MsgResp
 
 
 class IoThread(threading.Thread):
-    def __init__(self, cmd_queue: queue.Queue, resp_queue: queue.Queue):
+    def __init__(
+        self, char_dev_filename: str, cmd_queue: queue.Queue, resp_queue: queue.Queue
+    ):
         self.size_bytes = 1024
         self.mode = Mode.IDLE
         self.cmd_queue = cmd_queue
         self.resp_queue = resp_queue
 
-        self.filename = "/dev/pp_sp_pcie_user_0000:05:00.0"
+        self.filename = char_dev_filename
         self.fd = os.open(self.filename, os.O_RDWR)
         self.mem = mmap.mmap(self.fd, 4 * 1024 * 1024)
         self.st_gen = AvalonStGen(self.mem, 0x11000)

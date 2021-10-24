@@ -8,7 +8,14 @@ from QueueMsg import Mode, MsgCmd, MsgResp
 
 
 class Gui:
-    def __init__(self, stdscr, cmd_queue: queue.Queue, resp_queue: queue.Queue):
+    def __init__(
+        self,
+        stdscr,
+        char_dev_filename: str,
+        status_str: str,
+        cmd_queue: queue.Queue,
+        resp_queue: queue.Queue,
+    ):
         self.stdscr = stdscr
         self.cmd_queue = cmd_queue
         self.resp_queue = resp_queue
@@ -62,8 +69,8 @@ class Gui:
         self.controls[self.controls_sel].set_highlight(True)
         self.controls[self.controls_sel].refresh()
 
-        self.stdscr.addstr(23, 2, "Filename: /dev/pp_sp_dasdas_00:03:00")
-        self.stdscr.addstr(24, 2, "aaa")
+        self.stdscr.addstr(23, 2, f"Filename: {char_dev_filename}")
+        self.stdscr.addstr(24, 2, status_str)
 
         if True:
             self.bar_right_read = Bar(3, w // 2 - 5, 12, w // 2 + 3, max_val=8000)
