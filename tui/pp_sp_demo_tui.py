@@ -16,9 +16,8 @@ def main(stdscr, char_dev_filename):
     io_thread = IoThread(char_dev_filename, cmd_queue, resp_queue)
     io_thread.start()
 
-    stats = PcieStats.get_stats(char_dev_filename)
-    status_str = f"Link width = {stats.link_width}, speed = {stats.link_speed}"
-    gui = Gui(stdscr, char_dev_filename, status_str, cmd_queue, resp_queue)
+    pcie_stats = PcieStats.get_stats(char_dev_filename)
+    gui = Gui(stdscr, char_dev_filename, pcie_stats, cmd_queue, resp_queue)
     gui.run()
 
 

@@ -5,6 +5,7 @@ import time
 
 from GuiElements import Bar, MessagePane, RadioList, TransferSizeSel
 from QueueMsg import Mode, MsgCmd, MsgResp
+from PcieStats import PcieStatsResult
 
 
 class Gui:
@@ -12,7 +13,7 @@ class Gui:
         self,
         stdscr,
         char_dev_filename: str,
-        status_str: str,
+        pcie_stats: PcieStatsResult,
         cmd_queue: queue.Queue,
         resp_queue: queue.Queue,
     ):
@@ -53,11 +54,12 @@ class Gui:
 
         self.stdscr.addstr(6, 3, "Read speed:")
         self.stdscr.refresh()
-        self.bar_left_read = Bar(4, w // 2 - 4, 7, 2, max_val=8000)
+        bar_max_val = int(pcie_stats.max_speed_GBps * 1000)
+        self.bar_left_read = Bar(4, w // 2 - 4, 7, 2, max_val=bar_max_val)
 
         self.stdscr.refresh()
         self.stdscr.addstr(11, 3, "Write speed:")
-        self.bar_left_write = Bar(4, w // 2 - 4, 12, 2, max_val=8000)
+        self.bar_left_write = Bar(4, w // 2 - 4, 12, 2, max_val=bar_max_val)
 
         self.stdscr.addstr(16, 3, "Mode:")
         self.radio = RadioList(5, 14, 17, 2)
@@ -70,6 +72,9 @@ class Gui:
         self.controls[self.controls_sel].refresh()
 
         self.stdscr.addstr(23, 2, f"Filename: {char_dev_filename}")
+        status_str = (
+            f"Link width = {pcie_stats.link_width}, speed = {pcie_stats.link_speed}"
+        )
         self.stdscr.addstr(24, 2, status_str)
 
         if True:
