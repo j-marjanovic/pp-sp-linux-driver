@@ -285,7 +285,7 @@ int pp_sp_probe(struct pci_dev *pdev, const struct pci_device_id *id) {
 
 
 	device_create(pp_sp_class, dev, data->char_region, NULL,
-		MOD_NAME "_user_" "%s", pci_name(pdev));
+		MOD_NAME "_" "%s", pci_name(pdev));
 
 	return 0;
 
