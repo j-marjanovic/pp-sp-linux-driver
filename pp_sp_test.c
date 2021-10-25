@@ -50,7 +50,7 @@ void ast_gen_state(void* mem_gen, uint32_t* nr_samp_gen)
     uint32_t state = *(uint32_t*)(mem_gen + 0x10);
     uint32_t nr_samp = *(uint32_t*)(mem_gen + 0x24);
     printf("[gen] state = %x\n", state);
-    printf("[gen] nr samp = %x\n", nr_samp);
+    printf("[gen] nr samp = %d\n", nr_samp);
     if (nr_samp_gen) {
         *nr_samp_gen = nr_samp;
     }
@@ -69,7 +69,7 @@ int ast_check(void* mem_check)
 
     uint32_t samp_tot = *(uint32_t*)(mem_check + 0x10);
     uint32_t samp_ok = *(uint32_t*)(mem_check + 0x14);
-    printf("[check] samp = %x / %x\n", samp_ok, samp_tot);
+    printf("[check] samp = %d / %d\n", samp_ok, samp_tot);
 
     return (samp_ok == samp_tot);
 }
@@ -85,7 +85,7 @@ void print_usage(const char* prog_name)
     printf("  --dev       char device (e.g. /dev/pp_sp_pcie...)\n");
     printf("  --write     card to host (DMA write) transfer\n");
     printf("  --read      host to card (DMA read) transfer\n");
-    printf("  --nr_samp   number of samples (32-byte words to transfer (default 64)\n");
+    printf("  --nr_bytes  number of bytes to transfer (default 256)\n");
     printf("  --count     count of loops to perform the reads and/or writes (default 1)\n");
     printf("  --msleep    sleep (in milliseconds) during each loop (default 0)\n");
 }
@@ -93,7 +93,7 @@ void print_usage(const char* prog_name)
 int main(int argc, char* argv[])
 {
 
-    int nr_samp = 64;
+    int nr_bytes = 256;
     int count = 1;
     int loop_msleep = 0;
     char* dev = NULL;
@@ -102,13 +102,13 @@ int main(int argc, char* argv[])
 
     // clang-format off
     struct option long_options[] = {
-        { "help",    no_argument,       0,    'h' },
-        { "dev",     required_argument, 0,    'd' },
-        { "write",   no_argument,       &c2h, 1   },
-        { "read",    no_argument,       &h2c, 1   },
-        { "nr_samp", required_argument, 0,    'n' },
-        { "count",   required_argument, 0,    'c' },
-        { "msleep",  required_argument, 0,    'm' },
+        { "help",     no_argument,       0,    'h' },
+        { "dev",      required_argument, 0,    'd' },
+        { "write",    no_argument,       &c2h, 1   },
+        { "read",     no_argument,       &h2c, 1   },
+        { "nr_bytes", required_argument, 0,    'n' },
+        { "count",    required_argument, 0,    'c' },
+        { "msleep",   required_argument, 0,    'm' },
         { 0, 0, 0, 0 },
     };
     // clang-format on
@@ -124,7 +124,7 @@ int main(int argc, char* argv[])
             dev = optarg;
             break;
         case 'n':
-            nr_samp = atoi(optarg);
+            nr_bytes = atoi(optarg);
             break;
         case 'c':
             count = atoi(optarg);
@@ -144,7 +144,7 @@ int main(int argc, char* argv[])
     printf("Arguments:\n");
     printf("  dev = %s\n", dev);
     printf("  c2h = %d, h2c = %d\n", c2h, h2c);
-    printf("  nr_samp = %d, count = %d\n", nr_samp, count);
+    printf("  nr_bytes = %d, count = %d\n", nr_bytes, count);
 
     // init
     int fd = open(dev, O_RDWR | O_SYNC);
@@ -165,7 +165,7 @@ int main(int argc, char* argv[])
     void* mem_check = mem + 0x10000;
 
     int rc = 0;
-    uint32_t nr_samp_gen;
+    uint32_t nr_bytes_gen;
     struct pp_sp_tx_cmd_resp tx_cmd;
     clock_t t0, t1;
     uint16_t* data = (uint16_t*)calloc(1, 128 * 1024 * 1024);
@@ -176,12 +176,12 @@ int main(int argc, char* argv[])
         fflush(stdout);
 
         if (c2h) {
-            ast_gen_init(mem_gen, nr_samp * 32);
+            ast_gen_init(mem_gen, nr_bytes);
             ast_gen_state(mem_gen, NULL);
 
             // card to host DMA
             tx_cmd.dir_wr_rd_n = 1;
-            tx_cmd.size_bytes = nr_samp * 32;
+            tx_cmd.size_bytes = nr_bytes;
             t0 = clock();
             rc = ioctl(fd, PP_SP_IOCTL_START_TX, &tx_cmd);
             t1 = clock();
@@ -200,8 +200,8 @@ int main(int argc, char* argv[])
                     return EXIT_FAILURE;
                 }
             }
-            ast_gen_state(mem_gen, &nr_samp_gen);
-            assert((int)nr_samp_gen == nr_samp * 32);
+            ast_gen_state(mem_gen, &nr_bytes_gen);
+            assert((int)nr_bytes_gen == nr_bytes);
         }
 
         if (h2c) {
@@ -209,7 +209,7 @@ int main(int argc, char* argv[])
 
             // host to card DMA
             tx_cmd.dir_wr_rd_n = 0;
-            tx_cmd.size_bytes = nr_samp * 32;
+            tx_cmd.size_bytes = nr_bytes;
             t0 = clock();
             rc = ioctl(fd, PP_SP_IOCTL_START_TX, &tx_cmd);
             t1 = clock();
