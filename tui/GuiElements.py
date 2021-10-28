@@ -103,7 +103,6 @@ class ControlElement(ABC):
 class RadioList(ControlElement):
     def __init__(self, nlines: int, ncols: int, begin_y: int, begin_x: int):
         self.els = ["Idle", "Write", "Read"]
-        # TODO: change this to use Mode
         self.sel = 0
         self.highlight = False
         self.sel_highlight = 0
@@ -142,7 +141,6 @@ class RadioList(ControlElement):
 
 
 class TransferSizeSel(ControlElement):
-    # TODO: limits
     def __init__(self, nlines: int, ncols: int, begin_y: int, begin_x: int):
         self.size = 1024
         self.highlight = False
@@ -176,10 +174,12 @@ class TransferSizeSel(ControlElement):
         self.win.refresh()
 
     def cmd(self, char):
-        if char == curses.KEY_DOWN:  # TODO: check limits
-            self.size //= 2
-        elif char == curses.KEY_UP:  # TODO: check limits
-            self.size *= 2
+        if char == curses.KEY_DOWN:
+            if self.size > 32:
+                self.size //= 2
+        elif char == curses.KEY_UP:
+            if self.size < 4 * 1024 * 1024:
+                self.size *= 2
 
     def set_highlight(self, highlighted):
         self.highlight = highlighted

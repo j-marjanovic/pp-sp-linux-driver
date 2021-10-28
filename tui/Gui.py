@@ -2,6 +2,7 @@ import curses
 import datetime
 import queue
 import time
+from typing import Optional
 
 from GuiElements import Bar, MessagePane, RadioList, TransferSizeSel
 from QueueMsg import Mode, MsgCmd, MsgResp
@@ -16,10 +17,16 @@ class Gui:
         pcie_stats: PcieStatsResult,
         cmd_queue: queue.Queue,
         resp_queue: queue.Queue,
+        char_dev_filename2: Optional[str],
+        pcie_stats2: Optional[PcieStatsResult],
+        cmd_queue2: Optional[queue.Queue],
+        resp_queue2: Optional[queue.Queue],
     ):
         self.stdscr = stdscr
         self.cmd_queue = cmd_queue
         self.resp_queue = resp_queue
+        self.cmd_queue2 = cmd_queue2
+        self.resp_queue2 = resp_queue2
 
         curses.noecho()
         curses.cbreak()
@@ -43,14 +50,14 @@ class Gui:
             curses.A_BOLD | curses.color_pair(3),
         )
 
+        for posy in range(3, 25):
+            self.stdscr.addstr(posy, w // 2, "|")
+
         s = "Interface #0"
         self.stdscr.addstr(3, w // 4 - len(s) // 2, s, curses.A_BOLD)
 
         s = "PCIe lanes 0 - 7"
         self.stdscr.addstr(4, w // 4 - len(s) // 2, s)
-
-        for posy in range(3, 25):
-            self.stdscr.addstr(posy, w // 2, "|")
 
         self.stdscr.addstr(6, 3, "Read speed:")
         self.stdscr.refresh()
@@ -77,22 +84,41 @@ class Gui:
         )
         self.stdscr.addstr(24, 2, status_str)
 
-        if True:
-            self.bar_right_read = Bar(3, w // 2 - 5, 12, w // 2 + 3, max_val=8000)
-            self.stdscr.addstr(16, w // 2 + 4, "Mode:")
-            radio2 = RadioList(5, 14, 17, w // 2 + 3)
-            self.stdscr.addstr(16, w // 2 + 22, "Tr. size:")
-            ts2 = TransferSizeSel(3, 12, 17, w // 2 + 21)
-            self.controls.append(radio2)
-            self.controls.append(ts2)
+        if char_dev_filename2 is not None:
+            s = "Interface #1"
+            self.stdscr.addstr(3, w // 2 + w // 4 - len(s) // 2, s, curses.A_BOLD)
+
+            s = "PCIe lanes 8 - 15"
+            self.stdscr.addstr(4, w // 2 + w // 4 - len(s) // 2, s)
+
+            self.stdscr.addstr(6, w // 2 + 3, "Read speed:")
+            self.stdscr.refresh()
+            bar_max_val = int(pcie_stats2.max_speed_GBps * 1000)
+            self.bar_right_read = Bar(4, w // 2 - 4, 7, w // 2 + 2, max_val=bar_max_val)
+
+            self.stdscr.refresh()
+            self.stdscr.addstr(11, w // 2 + 3, "Write speed:")
+            self.bar_right_write = Bar(
+                4, w // 2 - 4, 12, w // 2 + 2, max_val=bar_max_val
+            )
+
+            self.stdscr.addstr(16, w // 2 + 3, "Mode:")
+            self.radio_right = RadioList(5, 14, 17, w // 2 + 2)
+            self.stdscr.addstr(16, w // 2 + 21, "Tr. size:")
+            self.ts_right = TransferSizeSel(3, 12, 17, w // 2 + 20)
+
+            self.controls.append(self.radio_right)
+            self.controls.append(self.ts_right)
+
+            self.stdscr.addstr(23, w // 2 + 2, f"Filename: {char_dev_filename2}")
+            status_str = f"Link width = {pcie_stats2.link_width}, speed = {pcie_stats2.link_speed}"
+            self.stdscr.addstr(24, w // 2 + 2, status_str)
 
         self.msg_pane = MessagePane(h - 27, w - 4, 26, 2)
         self.msg_pane.set_title("Log messages")
         self.msg_pane.refresh()
 
     def run(self):
-        dir = 1
-
         self.stdscr.nodelay(1)
         while True:
             try:
@@ -105,10 +131,22 @@ class Gui:
                         dt_str = datetime.datetime.now().strftime(
                             "%Y-%m-%d %H:%M:%S.%f"
                         )
-                        self.msg_pane.append_msg(f"[{dt_str}] {resp.msg}")
+                        self.msg_pane.append_msg(f"[{dt_str}] if0: {resp.msg}")
                     except queue.Empty:
                         pass
-                    time.sleep(0.01)
+
+                    if self.resp_queue2 is not None:
+                        try:
+                            resp2: MsgResp = self.resp_queue2.get_nowait()
+                            self.bar_right_read.set_value(resp2.read_throughput)
+                            self.bar_right_write.set_value(resp2.write_throughput)
+                            dt_str = datetime.datetime.now().strftime(
+                                "%Y-%m-%d %H:%M:%S.%f"
+                            )
+                            self.msg_pane.append_msg(f"[{dt_str}] if1: {resp2.msg}")
+                        except queue.Empty:
+                            pass
+                        time.sleep(0.01)
                 elif (
                     char == curses.KEY_RIGHT
                     and self.controls_sel < len(self.controls) - 1
@@ -134,6 +172,11 @@ class Gui:
                     self.controls[self.controls_sel].refresh()
                     mode = Mode(self.radio.sel)
                     self.cmd_queue.put(MsgCmd(False, self.ts.size, mode))
+                    if self.cmd_queue2 is not None:
+                        mode2 = Mode(self.radio_right.sel)
+                        self.cmd_queue2.put(MsgCmd(False, self.ts_right.size, mode2))
             except KeyboardInterrupt:
                 self.cmd_queue.put(MsgCmd(True, None, None))
+                if self.cmd_queue2 is not None:
+                    self.cmd_queue2.put(MsgCmd(True, None, None))
                 break
