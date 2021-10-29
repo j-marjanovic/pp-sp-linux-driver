@@ -28,6 +28,7 @@
 #include <linux/device.h>
 #include <linux/delay.h>
 #include <linux/ktime.h>
+#include <linux/uaccess.h>
 
 #include "pp_sp_pcie.h"
 
@@ -42,6 +43,9 @@
 
 #define PP_SP_BUFFER_SIZE	(4*1024*1024)
 
+#ifndef PCI_VENDOR_ID_ALTERA
+#define PCI_VENDOR_ID_ALTERA	(0x1172)
+#endif
 
 static struct class *pp_sp_class = NULL;
 
