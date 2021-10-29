@@ -12,7 +12,7 @@ class PcieStats:
     @staticmethod
     def get_stats(char_dev_filename: str) -> PcieStatsResult:
 
-        dev_addr = "/dev/pp_sp_pcie_user_0000:05:00.0".split("_")[-1]
+        dev_addr = char_dev_filename.split("_")[-1]
         sysfs_path = f"/sys/module/pp_sp_pcie/drivers/pci:pp_sp_pcie/{dev_addr}"
 
         link_width_path = f"{sysfs_path}/current_link_width"
