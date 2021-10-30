@@ -88,8 +88,9 @@ class IoThread(threading.Thread):
 
                     l = self.size_bytes // 2
                     expected = np.arange(0, l, dtype="uint16")
-                    samp_tot = l
-                    samp_ok = np.sum(buf[0:l] == expected)
+                    BYTES_PER_SAMP = 2
+                    samp_tot = l * BYTES_PER_SAMP
+                    samp_ok = np.sum(buf[0:l] == expected) * BYTES_PER_SAMP
 
                     check_percent = samp_ok / samp_tot * 100
                     msg_check = (
