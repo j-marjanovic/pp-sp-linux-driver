@@ -175,7 +175,7 @@ class TransferSizeSel(ControlElement):
 
     def cmd(self, char):
         if char == curses.KEY_DOWN:
-            if self.size > 32:
+            if self.size > 128:
                 self.size //= 2
         elif char == curses.KEY_UP:
             if self.size < 4 * 1024 * 1024:
