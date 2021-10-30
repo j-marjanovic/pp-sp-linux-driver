@@ -8,14 +8,20 @@ from Gui import Gui
 from IoThread import IoThread
 from PcieStats import PcieStats
 
+EXPECTED_SUBSYS_VENDOR = 0x1A2
+EXPECTED_SUBSYS_DEVICE_IF0 = 0x1
+EXPECTED_SUBSYS_DEVICE_IF1 = 0x2
+
 
 def main(stdscr, char_dev_filename0, char_dev_filename1):
     if char_dev_filename0 is not None:
         cmd_queue0 = queue.Queue()
         resp_queue0 = queue.Queue()
         io_thread0 = IoThread(char_dev_filename0, cmd_queue0, resp_queue0)
-        io_thread0.start()
         pcie_stats0 = PcieStats.get_stats(char_dev_filename0)
+        assert pcie_stats0.subsystem_vendor == EXPECTED_SUBSYS_VENDOR
+        assert pcie_stats0.subsystem_device == EXPECTED_SUBSYS_DEVICE_IF0
+        io_thread0.start()
     else:
         cmd_queue0 = None
         resp_queue0 = None
@@ -25,8 +31,10 @@ def main(stdscr, char_dev_filename0, char_dev_filename1):
         cmd_queue1 = queue.Queue()
         resp_queue1 = queue.Queue()
         io_thread1 = IoThread(char_dev_filename1, cmd_queue1, resp_queue1)
-        io_thread1.start()
         pcie_stats1 = PcieStats.get_stats(char_dev_filename1)
+        assert pcie_stats1.subsystem_vendor == EXPECTED_SUBSYS_VENDOR
+        assert pcie_stats1.subsystem_device == EXPECTED_SUBSYS_DEVICE_IF1
+        io_thread1.start()
     else:
         cmd_queue1 = None
         resp_queue1 = None

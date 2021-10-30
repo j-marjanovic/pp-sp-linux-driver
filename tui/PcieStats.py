@@ -6,6 +6,8 @@ class PcieStatsResult:
     link_width: str
     link_speed: str
     max_speed_GBps: float
+    subsystem_vendor: int
+    subsystem_device: int
 
 
 class PcieStats:
@@ -29,6 +31,18 @@ class PcieStats:
 
         max_speed_GBps = lane_rate_gbps * int(link_width) / 8
 
+        subsystem_vendor_path = f"{sysfs_path}/subsystem_vendor"
+        subsystem_vendor = open(subsystem_vendor_path, "r").read().strip()
+        subsystem_vendor = int(subsystem_vendor, 0)
+
+        subsystem_device_path = f"{sysfs_path}/subsystem_device"
+        subsystem_device = open(subsystem_device_path, "r").read().strip()
+        subsystem_device = int(subsystem_device, 0)
+
         return PcieStatsResult(
-            link_width=link_width, link_speed=link_speed, max_speed_GBps=max_speed_GBps
+            link_width=link_width,
+            link_speed=link_speed,
+            max_speed_GBps=max_speed_GBps,
+            subsystem_vendor=subsystem_vendor,
+            subsystem_device=subsystem_device,
         )
