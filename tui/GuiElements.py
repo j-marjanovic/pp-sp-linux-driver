@@ -52,7 +52,7 @@ class Bar:
         self.refresh()
 
     def set_value(self, val: float):
-        self.txt = f" {val:7.2f} MB/s"
+        self.txt = f" {val:8.2f} MB/s"
         self.fill_perc = val * 100 / self.max_val
         self.prev_vals.append(val)
         if len(self.prev_vals) > 100:
@@ -71,16 +71,11 @@ class Bar:
 
     def refresh(self):
         h, w = self.win.getmaxyx()
-        w_fill = (w - 2) * self.fill_perc // 100
+        w_fill = int((w - 2) * self.fill_perc / 100)
 
-        for i in range(1, w - 1):
-            try:
-                ch = self.txt[i - 1]
-            except IndexError:
-                ch = " "
-
-            color = curses.color_pair(6) if i <= w_fill else curses.color_pair(2)
-            self.win.addch(1, i, ch, color)
+        txt = self.txt.ljust(w - 2)
+        self.win.addstr(1, 1, txt[:w_fill], curses.color_pair(6))
+        self.win.addstr(1, 1 + w_fill, txt[w_fill:], curses.color_pair(2))
 
         self.win.addstr(2, 1, self.stats_txt)
         self.win.refresh()

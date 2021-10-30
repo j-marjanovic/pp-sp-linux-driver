@@ -38,7 +38,7 @@ class Gui:
         curses.init_pair(3, curses.COLOR_WHITE, curses.COLOR_MAGENTA)
         curses.init_pair(4, curses.COLOR_YELLOW, curses.COLOR_BLACK)
         curses.init_pair(5, curses.COLOR_BLACK, curses.COLOR_YELLOW)
-        curses.init_pair(6, curses.COLOR_WHITE, curses.COLOR_RED)
+        curses.init_pair(6, curses.COLOR_WHITE, curses.COLOR_BLUE)
 
         h, w = self.stdscr.getmaxyx()
 
