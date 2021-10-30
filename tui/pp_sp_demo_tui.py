@@ -9,34 +9,39 @@ from IoThread import IoThread
 from PcieStats import PcieStats
 
 
-def main(stdscr, char_dev_filename, char_dev_filename2):
-    cmd_queue = queue.Queue()
-    resp_queue = queue.Queue()
-    io_thread = IoThread(char_dev_filename, cmd_queue, resp_queue)
-    io_thread.start()
-    pcie_stats = PcieStats.get_stats(char_dev_filename)
-
-    if char_dev_filename2 is not None:
-        cmd_queue2 = queue.Queue()
-        resp_queue2 = queue.Queue()
-        io_thread2 = IoThread(char_dev_filename2, cmd_queue2, resp_queue2)
-        io_thread2.start()
-        pcie_stats2 = PcieStats.get_stats(char_dev_filename2)
+def main(stdscr, char_dev_filename0, char_dev_filename1):
+    if char_dev_filename0 is not None:
+        cmd_queue0 = queue.Queue()
+        resp_queue0 = queue.Queue()
+        io_thread0 = IoThread(char_dev_filename0, cmd_queue0, resp_queue0)
+        io_thread0.start()
+        pcie_stats0 = PcieStats.get_stats(char_dev_filename0)
     else:
-        cmd_queue2 = None
-        resp_queue2 = None
-        pcie_stats2 = None
+        cmd_queue0 = None
+        resp_queue0 = None
+        pcie_stats0 = None
+
+    if char_dev_filename1 is not None:
+        cmd_queue1 = queue.Queue()
+        resp_queue1 = queue.Queue()
+        io_thread1 = IoThread(char_dev_filename1, cmd_queue1, resp_queue1)
+        io_thread1.start()
+        pcie_stats1 = PcieStats.get_stats(char_dev_filename1)
+    else:
+        cmd_queue1 = None
+        resp_queue1 = None
+        pcie_stats1 = None
 
     gui = Gui(
         stdscr,
-        char_dev_filename,
-        pcie_stats,
-        cmd_queue,
-        resp_queue,
-        char_dev_filename2,
-        pcie_stats2,
-        cmd_queue2,
-        resp_queue2,
+        char_dev_filename0,
+        pcie_stats0,
+        cmd_queue0,
+        resp_queue0,
+        char_dev_filename1,
+        pcie_stats1,
+        cmd_queue1,
+        resp_queue1,
     )
     gui.run()
 
@@ -44,18 +49,21 @@ def main(stdscr, char_dev_filename, char_dev_filename2):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="")
     parser.add_argument(
-        "char_dev",
+        "char_dev0",
         type=str,
         help="dev filename (e.g. /dev/pp_sp_pcie_user_0000:04:00.0)",
     )
 
     parser.add_argument(
-        "char_dev2",
+        "char_dev1",
         type=str,
+        default="None",
         nargs="?",
-        default=None,
-        help="dev filename (e.g. /dev/pp_sp_pcie_user_0000:04:00.0)",
+        help="dev filename (e.g. /dev/pp_sp_pcie_user_0000:05:00.0)",
     )
 
     args = parser.parse_args()
-    curses.wrapper(main, args.char_dev, args.char_dev2)
+    char_dev0 = None if args.char_dev0 == "None" else args.char_dev0
+    char_dev1 = None if args.char_dev1 == "None" else args.char_dev1
+
+    curses.wrapper(main, char_dev0, char_dev1)
