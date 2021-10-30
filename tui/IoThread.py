@@ -7,6 +7,8 @@ import struct
 import threading
 import time
 
+import numpy as np
+
 from HwModules import AvalonStGen, AvalonStCheck, pp_sp_tx_cmd_resp
 from PpSpIoctls import PpSpIoctls, pp_sp_tx_cmd_resp_size
 from QueueMsg import Mode, MsgCmd, MsgResp
@@ -67,22 +69,41 @@ class IoThread(threading.Thread):
                     throughput_read_mbps = throughput_mbps
                     throughput_write_mbps = 0
                     samp_tot, samp_ok = self.st_check.get_stats()
-                    msg_check = f", check = {samp_ok}/{samp_tot}"
+                    check_percent = samp_ok / samp_tot * 100
+                    msg_check = (
+                        f", check = {samp_ok}/{samp_tot} ({check_percent:.2f} %)"
+                    )
                 elif self.mode == Mode.WRITE:
                     state, samp_tx = self.st_gen.get_state()
                     assert state == 0
                     assert samp_tx == self.size_bytes
                     throughput_read_mbps = 0
                     throughput_write_mbps = throughput_mbps
-                    msg_check = ""
+
+                    cmd_resp = bytearray(4 * 1024 * 1024)
+                    fcntl.ioctl(
+                        self.fd, PpSpIoctls.PP_SP_IOCTL_GET_BUFFER, cmd_resp, True
+                    )
+                    buf = np.frombuffer(cmd_resp, dtype="uint16")
+
+                    l = self.size_bytes // 2
+                    expected = np.arange(0, l, dtype="uint16")
+                    samp_tot = l
+                    samp_ok = np.sum(buf[0:l] == expected)
+
+                    check_percent = samp_ok / samp_tot * 100
+                    msg_check = (
+                        f", check = {samp_ok}/{samp_tot} ({check_percent:.2f} %)"
+                    )
                 else:
                     throughput_read_mbps = 0
                     throughput_write_mbps = 0
                     msg_check = ""
 
+                duration_us = ret_cmd_resp.duration_ns / 1000
                 self.resp_queue.put(
                     MsgResp(
-                        f"mode = {self.mode}, size = {self.size_bytes} B, dur = {ret_cmd_resp.duration_ns / 1000:.2f} us{msg_check}",
+                        f"{self.mode}, {self.size_bytes} B, {duration_us:.3f} us{msg_check}",
                         throughput_read_mbps,
                         throughput_write_mbps,
                     )
